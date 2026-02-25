@@ -12,12 +12,12 @@ export default defineConfig({
     port: 5173,
     proxy: {      
       '/api/v1/metrics': {
-        target: 'http://10.0.0.30:8080',
+        target: process.env.VITE_METRICS_TARGET || 'http://10.0.0.30:8080',
         changeOrigin: true,
         secure: false,
       },
       '/api/containers': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_CONTAINERS_TARGET || 'http://localhost:5000',
         secure: false,
         changeOrigin: true,
         ws: true,
