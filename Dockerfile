@@ -20,8 +20,11 @@ COPY . .
 # Ensure tmp directory exists and is writable
 RUN mkdir -p /tmp/.vite && chmod -R 777 /tmp
 
+# Make entrypoint script executable
+RUN chmod +x /app/entrypoint.sh
+
 # Create volume for node_modules to ensure it's writable
 VOLUME ["/app/node_modules"]
 
 EXPOSE 5173
-CMD ["npm", "run", "dev", "--", "--force"]
+ENTRYPOINT ["/app/entrypoint.sh"]
