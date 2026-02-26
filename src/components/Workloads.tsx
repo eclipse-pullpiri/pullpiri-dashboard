@@ -67,10 +67,31 @@ export function Workloads({ onPodClick, pods, setPods, recentEvents, setRecentEv
       fetch('/api/v1/metrics/nodes')
         .then(res => res.json())
         .then(data => {
-          if (Array.isArray(data) && data.length > 0) {
-            setNodesDataToUse(data);
-            setNodesFetchSuccess(true);
-            console.log("✅ Nodes API fetched:", data);
+          // Accept either an array or an object with `nodes: []`
+          let nodes: any[] = [];
+          if (Array.isArray(data)) nodes = data;
+          else if (data && Array.isArray((data as any).nodes)) nodes = (data as any).nodes;
+          else {
+            setNodesFetchSuccess(false);
+            setNodesDataToUse([]);
+            console.warn("Nodes API returned unexpected shape", data);
+            return;
+          }
+
+          if (nodes.length > 0) {
+            // Normalize numeric fields and provide safe defaults
+            const normalized = nodes.map((n) => ({
+              ...n,
+              cpu_usage: typeof n.cpu_usage === "number" ? n.cpu_usage : Number(n.cpu_usage) || 0,
+              cpu_count: typeof n.cpu_count === "number" ? n.cpu_count : Number(n.cpu_count) || 0,
+              used_memory: typeof n.used_memory === "number" ? n.used_memory : Number(n.used_memory) || 0,
+              total_memory: typeof n.total_memory === "number" ? n.total_memory : Number(n.total_memory) || 0,
+              mem_usage: typeof n.mem_usage === "number" ? n.mem_usage : Number(n.mem_usage) || 0,
+            }));
+
+            setNodesDataToUse(normalized);      
+	    setNodesFetchSuccess(true);
+            console.log("✅ Nodes API fetched:", normalized);
 
             setRecentEvents(prev => {
               const newEvent = {
@@ -251,50 +272,32 @@ export function Workloads({ onPodClick, pods, setPods, recentEvents, setRecentEv
   const failedPods = pods.filter((pod) => pod.status === "Failed").length;
 */
   // Nodes data with more detailed information
+  const GB = 1024 * 1024 * 1024;
+
   const nodesData = nodesFetchSuccess
     ? nodesDataToUse.map((node: any) => ({
       name: node.node_name,
       pods: pods.filter((pod) => pod.node === node.node_name).length,
       status: "Ready",
-      cpu: `${(node.cpu_usage / 100 * node.cpu_count).toFixed(1)}/${node.cpu_count}`,
-      memory: `${(node.used_memory / 1024 / 1024 / 1024).toFixed(1)}/${(node.total_memory / 1024 / 1024 / 1024).toFixed(1)}`,
-      cpuUsage: Number(node.cpu_usage.toFixed(1)),
-      memoryUsage: Number(node.mem_usage.toFixed(1)),
-      storageUsage: 0, // If you have storage info, fill here
+      // Show CPU as "count (usage%)" and expose numeric percentage fields for charts
+      cpu: `${node.cpu_count} (${(node.cpu_usage ?? 0).toFixed(1)}%)`,
+      cpuCount: node.cpu_count || 0,
+      cpuUsage: Number((node.cpu_usage ?? 0).toFixed(1)),
+      // Memory in GiB display
+      memory: `${(node.used_memory / GB).toFixed(1)}Gi / ${(node.total_memory / GB).toFixed(1)}Gi`,
+      memoryUsage: Number((node.mem_usage ?? 0).toFixed(1)),
+      totalMemoryBytes: node.total_memory || 0,
+      usedMemoryBytes: node.used_memory || 0,
+      // Additional metadata
+      ip: node.ip || node.internal_ip || "",
+      os: node.os || "",
+      arch: node.arch || "",
+      // Storage: try common fields, fallback to 0
+      storageUsage: node.storage_usage || node.used_storage || 0,
+      totalStorage: node.total_storage || node.storage_total || 0,
     }))
     : [];
 
-  // Mock Data
-  // {
-  //       name: "worker-node-1",
-  //       pods: pods.filter((pod) => pod.node === "worker-node-1").length,
-  //       status: "Ready",
-  //       cpu: "2.4/4",
-  //       memory: "3.2/8",
-  //       cpuUsage: 60,
-  //       memoryUsage: 40,
-  //       storageUsage: 35,
-  //     },
-  //     {
-  //       name: "worker-node-2",
-  //       pods: pods.filter((pod) => pod.node === "worker-node-2").length,
-  //       status: "Ready",
-  //       cpu: "1.8/4",
-  //       memory: "2.1/8",
-  //       cpuUsage: 45,
-  //       memoryUsage: 26,
-  //       storageUsage: 50,
-  //     },
-  //     {
-  //       name: "worker-node-3",
-  //       pods: pods.filter((pod) => pod.node === "worker-node-3").length,
-  //       status: "Ready",
-  //       cpu: "0.8/4",
-  //       memory: "1.5/8",
-  //       cpuUsage: 20,
-  //       memoryUsage: 19,
-  //       storageUsage: 60,
-  //     },
 
   // Get unique node names from pods
   const availableNodes = Array.from(new Set(nodesData.map((node) => node.name)));
@@ -537,7 +540,7 @@ export function Workloads({ onPodClick, pods, setPods, recentEvents, setRecentEv
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   }`}
               >
-                <Network className="w-3 h-3 mr-1" />
+                <Server className="w-3 h-3 mr-1" />
                 All Nodes
               </Button>
               {availableNodes.map((nodeName) => (
@@ -593,7 +596,7 @@ export function Workloads({ onPodClick, pods, setPods, recentEvents, setRecentEv
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
-                <Network className="w-6 h-6 text-white" />
+                <Server className="w-6 h-6 text-white" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">

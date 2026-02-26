@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: Copyright 2024 LG Electronics Inc.
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
@@ -19,6 +19,7 @@ import {
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { Progress } from "./ui/progress";
 import {
   Search,
   MoreHorizontal,
@@ -33,44 +34,116 @@ export function Cluster() {
   const [searchTerm, setSearchTerm] = useState("");
 
   // Mock data
-  const nodes = [
-    {
-      name: "master-node-1",
-      internalIP: "192.168.1.10",
-      os: "Ubuntu 22.04",
-      arch: "amd64",
-      cpuCapacity: "4",
-      memoryCapacity: "8Gi",
-      storage: "50Gi",
-    },
-    {
-      name: "worker-node-1",
-      internalIP: "192.168.1.11",
-      os: "Ubuntu 22.04",
-      arch: "amd64",
-      cpuCapacity: "8",
-      memoryCapacity: "16Gi",
-      storage: "100Gi",
-    },
-    {
-      name: "worker-node-2",
-      internalIP: "192.168.1.12",
-      os: "Ubuntu 22.04",
-      arch: "amd64",
-      cpuCapacity: "8",
-      memoryCapacity: "16Gi",
-      storage: "100Gi",
-    },
-    {
-      name: "worker-node-3",
-      internalIP: "192.168.1.13",
-      os: "Ubuntu 22.04",
-      arch: "arm64",
-      cpuCapacity: "8",
-      memoryCapacity: "16Gi",
-      storage: "100Gi",
-    },
-  ];
+  // nodes fetched from settingsservice
+  const [nodesDataToUse, setNodesDataToUse] = useState<any[]>([]);
+  const [nodesFetchSuccess, setNodesFetchSuccess] = useState(false);
+  const [nodesFetchError, setNodesFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const settingserviceApiUrl = import.meta.env.VITE_SETTING_SERVICE_API_URL;
+    const endpoint = settingserviceApiUrl
+      ? `${settingserviceApiUrl.replace(/\/+$/, "")}/api/v1/nodes`
+      : "/api/v1/nodes";
+
+    const fetchNodes = async () => {
+      setNodesFetchError(null);
+      const tryRelative = async () => {
+        // Try the metrics path first (Workloads uses /api/v1/metrics/nodes)
+        const candidates = [
+          "/api/v1/metrics/nodes",
+          "/api/v1/nodes",
+        ];
+        for (const path of candidates) {
+          try {
+            const res = await fetch(path);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return await res.json();
+          } catch (e) {
+            console.debug(`Relative ${path} fetch failed:`, e);
+            // try next
+          }
+        }
+        throw new Error("All relative node endpoints failed");
+      };
+
+      const tryAbsolute = async () => {
+        if (!endpoint) throw new Error("No endpoint configured");
+        try {
+          const res = await fetch(endpoint);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return await res.json();
+        } catch (e) {
+          console.debug("Absolute settingsservice fetch failed:", e);
+          throw e;
+        }
+      };
+
+      let data: any = null;
+      try {
+        // Prefer relative path (dev proxy or same-origin)
+        data = await tryRelative();
+      } catch (eRel) {
+        // If relative failed, try absolute (explicit settingservice URL)
+        try {
+          data = await tryAbsolute();
+        } catch (eAbs) {
+          const msg = (eAbs && (eAbs as Error).message) || String(eAbs || eRel);
+          console.error("Nodes fetch failed:", eAbs || eRel);
+          setNodesFetchError(msg);
+          setNodesFetchSuccess(false);
+          setNodesDataToUse([]);
+          return;
+        }
+      }
+
+      // Normalize response shape
+      let nodes: any[] = [];
+      if (Array.isArray(data)) nodes = data;
+      else if (data && Array.isArray((data as any).nodes)) nodes = (data as any).nodes;
+      else {
+        setNodesFetchError("Unexpected response shape from nodes API");
+        setNodesFetchSuccess(false);
+        setNodesDataToUse([]);
+        return;
+      }
+
+      if (nodes.length > 0) {
+        const normalized = nodes.map((n) => ({
+          ...n,
+          cpu_usage: typeof n.cpu_usage === "number" ? n.cpu_usage : Number(n.cpu_usage) || 0,
+          cpu_count: typeof n.cpu_count === "number" ? n.cpu_count : Number(n.cpu_count) || 0,
+          used_memory: typeof n.used_memory === "number" ? n.used_memory : Number(n.used_memory) || 0,
+          total_memory: typeof n.total_memory === "number" ? n.total_memory : Number(n.total_memory) || 0,
+          mem_usage: typeof n.mem_usage === "number" ? n.mem_usage : Number(n.mem_usage) || 0,
+        }));
+        setNodesDataToUse(normalized);
+        setNodesFetchSuccess(true);
+      } else {
+        setNodesFetchSuccess(false);
+        setNodesDataToUse([]);
+      }
+    };
+
+    fetchNodes();
+    const interval = setInterval(fetchNodes, import.meta.env.VITE_SETTING_SERVICE_TIMEOUT || 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const GB = 1024 * 1024 * 1024;
+  const nodes = nodesFetchSuccess
+    ? nodesDataToUse.map((node: any) => ({
+        name: node.node_name,
+        internalIP: node.ip || node.internal_ip || "",
+        os: node.os || "",
+        arch: node.arch || "",
+  // Use raw values from API: cpu_usage and mem_usage
+  cpuUsage: node.cpu_usage ?? 0,
+  memoryUsage: node.mem_usage ?? 0,
+  totalStorage: node.total_storage || node.storage_total || 0,
+        storageUsage: node.storage_usage || node.used_storage || 0,
+  // pods removed from this table per request
+      }))
+    : [];
 
 
 
@@ -125,7 +198,7 @@ export function Cluster() {
             </div>
             <div>
               <CardTitle className="text-foreground">
-                Cluster Nodes
+                Nodes
               </CardTitle>
               <CardDescription>
                 Physical and virtual machines in your cluster
@@ -134,7 +207,12 @@ export function Cluster() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-hidden rounded-xl border border-border/30">
+            <div className="overflow-hidden rounded-xl border border-border/30">
+              {nodesFetchError && (
+                <div className="p-3 text-sm text-yellow-700 bg-yellow-50 border-b border-yellow-100">
+                  Nodes fetch error: {nodesFetchError}
+                </div>
+              )}
             <Table>
               <TableHeader className="bg-muted/80">
                 <TableRow className="border-border/30">
@@ -150,16 +228,9 @@ export function Cluster() {
                   <TableHead className="font-semibold text-foreground">
                     Internal IP
                   </TableHead>
-                  <TableHead className="font-semibold text-foreground">
-                    CPU
-                  </TableHead>
-                  <TableHead className="font-semibold text-foreground">
-                    Memory
-                  </TableHead>
-                  <TableHead className="font-semibold text-foreground">
-                    Storage
-                  </TableHead>
-                  <TableHead className="font-semibold text-foreground"></TableHead>
+                    <TableHead className="font-semibold text-foreground">CPU Usage</TableHead>
+                    <TableHead className="font-semibold text-foreground">Memory Usage</TableHead>
+                  <TableHead className="font-semibold text-foreground">Storage</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -183,37 +254,25 @@ export function Cluster() {
                       {node.internalIP}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Cpu className="w-3 h-3 text-muted-foreground" />
-                        <span className="font-mono text-sm">
-                          {node.cpuCapacity}
-                        </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">{typeof node.cpuUsage === 'number' ? node.cpuUsage.toFixed(2) : String(node.cpuUsage)}</span>
+                        <div className="w-24">
+                          <Progress value={Math.min(100, Math.max(0, Number(node.cpuUsage) || 0))} className="h-2" />
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <MemoryStick className="w-3 h-3 text-muted-foreground" />
-                        <span className="font-mono text-sm">
-                          {node.memoryCapacity}
-                        </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">{typeof node.memoryUsage === 'number' ? node.memoryUsage.toFixed(2) : String(node.memoryUsage)}</span>
+                        <div className="w-36">
+                          <Progress value={Math.min(100, Math.max(0, Number(node.memoryUsage) || 0))} className="h-2" />
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <HardDrive className="w-3 h-3 text-muted-foreground" />
-                        <span className="font-mono text-sm">
-                          {node.storage}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-8 h-8 hover:bg-muted"
-                      >
-                        <MoreHorizontal className="h-3 w-3" />
-                      </Button>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {node.totalStorage && node.totalStorage > 0
+                        ? `${(node.storageUsage / GB).toFixed(1)}Gi / ${(node.totalStorage / GB).toFixed(1)}Gi`
+                        : "N/A"}
                     </TableCell>
                   </TableRow>
                 ))}
