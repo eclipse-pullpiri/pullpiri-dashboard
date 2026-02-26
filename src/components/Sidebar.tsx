@@ -36,10 +36,10 @@ export function Sidebar({
 }: SidebarProps) {
   const menuItems = [
     { id: "workloads", label: "Workloads", icon: Box },
-    { id: "services", label: "Services", icon: Network },
-    { id: "storage", label: "Storage", icon: Database },
+    { id: "services", label: "Services", icon: Network , disabled: true},
+    { id: "storage", label: "Storage", icon: Database , disabled: true },
     { id: "cluster", label: "Nodes", icon: Server },
-    { id: "scenarios", label: "Scenarios", icon: GitBranch },
+    { id: "scenarios", label: "Scenarios", icon: GitBranch , disabled: true },
   ];
 
   // Mobile sidebar (bottom navigation style)
@@ -51,6 +51,7 @@ export function Sidebar({
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
+	    const disabled = !!(item as any).disabled;
             return (
               <Button
                 key={item.id}
@@ -59,15 +60,16 @@ export function Sidebar({
                   isActive
                     ? "bg-primary/10 shadow-lg text-foreground border border-border/30"
                     : "hover:bg-muted/40 hover:shadow-md text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => onViewChange(item.id as any)}
+                } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={() => !disabled && onViewChange(item.id as any)}
                 title={item.label}
+		aria-disabled={disabled}
               >
                 <div
                   className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                     isActive
                       ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground group-hover:text-foreground"
+                      : "bg-muted/60 text-muted-foreground group-hover:bg-primary/10 group-hover:text-foreground"
                   } transition-all duration-300`}
                 >
                   <Icon className="w-4 h-4" />
@@ -159,6 +161,7 @@ export function Sidebar({
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
+	  const disabled = !!(item as any).disabled;
           return (
             <Button
               key={item.id}
@@ -169,9 +172,10 @@ export function Sidebar({
                 isActive
                   ? "bg-primary/10 shadow-lg scale-105 text-foreground border border-border/30"
                   : "hover:bg-muted/40 hover:shadow-md hover:scale-[1.02] text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => onViewChange(item.id as any)}
+              } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => !disabled && onViewChange(item.id as any)}
               title={collapsed ? item.label : undefined}
+              aria-disabled={disabled}
             >
               <div
                 className={`w-8 lg:w-10 h-8 lg:h-10 rounded-xl flex items-center justify-center ${
