@@ -12,9 +12,20 @@ export default defineConfig({
     port: 5173,
     proxy: {      
       '/api/v1/metrics': {
-        target: process.env.VITE_METRICS_TARGET || 'http://10.0.0.30:8080',
+        target: process.env.VITE_SETTING_SERVICE_API_URL || 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log('Proxying:', req.method, req.url, '→', options.target + req.url);
+          });
+          proxy.on('proxyRes', (proxyRes, req, res) => {
+            console.log('Response:', proxyRes.statusCode, 'for', req.url);
+          });
+          proxy.on('error', (err, req, res) => {
+            console.error('Proxy error:', err.message, 'for', req.url);
+          });
+        },
       },
       '/api/containers': {
         target: process.env.VITE_CONTAINERS_TARGET || 'http://localhost:5000',
@@ -27,8 +38,28 @@ export default defineConfig({
           });
         },
         timeout: 60000,
-
         proxyTimeout: 60000,
+      },
+      '/logs': {
+        target: process.env.VITE_LOG_SERVICE_URL || 'http://localhost:47097',
+        changeOrigin: true,
+        secure: false,
+        ws: true,
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log('Proxying logs:', req.method, req.url, '→', options.target + req.url);
+          });
+          proxy.on('proxyRes', (proxyRes, req, res) => {
+            console.log('Logs response:', proxyRes.statusCode, 'for', req.url);
+            // Add CORS headers to response
+            proxyRes.headers['access-control-allow-origin'] = '*';
+            proxyRes.headers['access-control-allow-methods'] = '*';
+            proxyRes.headers['access-control-allow-headers'] = '*';
+          });
+          proxy.on('error', (err, req, res) => {
+            console.error('Logs proxy error:', err.message, 'for', req.url);
+          });
+        },
       },
     },
   },
