@@ -52,13 +52,17 @@ export function Dashboard() {
     const _timeout = import.meta.env.VITE_SETTING_SERVICE_TIMEOUT || 5000;
     if (!settingserviceApiUrl) return;
     const fetchPods = () => {
-//      fetch(`${settingserviceApiUrl}/api/v1/metrics`)
-      fetch('/api/v1/metrics')
+      fetch(`${settingserviceApiUrl}/api/v1/metrics`)
+//      fetch('/api/v1/metrics')
 //       fetch(`/api/containers`) //temp for Flash Server
-        .then(res => res.json())
+        .then(res => {
+          console.log("🔍 API Response status:", res.status);
+          return res.json();
+        })
         .then(data => {
           // Filter for containers only
           console.log("Fetched metrics data:", data);
+          console.log("🔍 Data type:", typeof data, "Is array:", Array.isArray(data));
           const containers = Array.isArray(data)
             ? data.filter(
               (item: any) =>
@@ -68,6 +72,7 @@ export function Dashboard() {
                 item.value.value
             )
             : [];
+          console.log("🔍 Filtered containers count:", containers.length);
           if (containers.length > 0) {
             // Map API data to Pod[]
             const mappedPods = containers.map((item: any, idx: number) => {

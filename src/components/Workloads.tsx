@@ -14,6 +14,7 @@ import { LogsDialog } from "./LogsDialog";
 import { TerminalView } from "./TerminalView";
 import { YamlEditor } from "./YamlEditor";
 import { CreatePodDialog } from "./CreatePodDialog";
+import { LogStream } from "./LogStream";
 import { PieChart, Pie, Cell, ResponsiveContainer, /*BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line, Area, AreaChart,*/ Tooltip } from 'recharts';
 
 // Pod interface
@@ -63,8 +64,8 @@ export function Workloads({ onPodClick, pods, setPods, recentEvents, setRecentEv
 
     // Fetch function
     const fetchNodes = () => {
-//      fetch(`${settingserviceApiUrl}/api/v1/metrics/nodes`)
-      fetch('/api/v1/metrics/nodes')
+      fetch(`${settingserviceApiUrl}/api/v1/metrics/nodes`)
+//      fetch('/api/v1/metrics/nodes')
         .then(res => res.json())
         .then(data => {
           // Accept either an array or an object with `nodes: []`
@@ -822,6 +823,9 @@ export function Workloads({ onPodClick, pods, setPods, recentEvents, setRecentEv
           </Badge>
         </div>
       </div>
+
+      {/* Log Stream */}
+      <LogStream />
 
       {/* Pods Table */}
       <Card className="bg-card/80 backdrop-blur-sm border-border/20 shadow-xl overflow-visible">

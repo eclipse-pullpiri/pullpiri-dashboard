@@ -4,6 +4,7 @@
 interface AppConfig {
   SETTING_SERVICE_API_URL: string;
   SETTING_SERVICE_TIMEOUT: number;
+  LOG_SERVICE_URL: string;
 }
 
 declare global {
@@ -21,6 +22,7 @@ export const getConfig = (): AppConfig => {
   return {
     SETTING_SERVICE_API_URL: 'http://localhost:8080',
     SETTING_SERVICE_TIMEOUT: 5000,
+    LOG_SERVICE_URL: 'http://localhost:47097',
   };
 };
 
