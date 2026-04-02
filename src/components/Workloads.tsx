@@ -64,8 +64,8 @@ export function Workloads({ onPodClick, pods, setPods, recentEvents, setRecentEv
 
     // Fetch function
     const fetchNodes = () => {
-      fetch(`${settingserviceApiUrl}/api/v1/metrics/nodes`)
-//      fetch('/api/v1/metrics/nodes')
+//      fetch(`${settingserviceApiUrl}/api/v1/metrics/nodes`)
+      fetch('/api/v1/metrics/nodes')
         .then(res => res.json())
         .then(data => {
           // Accept either an array or an object with `nodes: []`

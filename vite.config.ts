@@ -12,7 +12,7 @@ export default defineConfig({
     port: 5173,
     proxy: {      
       '/api/v1/metrics': {
-        target: process.env.VITE_SETTING_SERVICE_API_URL || 'http://localhost:8080',
+        target: process.env.VITE_METRICS_TARGET || 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {
