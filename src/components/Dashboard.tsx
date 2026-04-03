@@ -52,8 +52,8 @@ export function Dashboard() {
     const _timeout = import.meta.env.VITE_SETTING_SERVICE_TIMEOUT || 5000;
     if (!settingserviceApiUrl) return;
     const fetchPods = () => {
-      fetch(`${settingserviceApiUrl}/api/v1/metrics`)
-//      fetch('/api/v1/metrics')
+//      fetch(`${settingserviceApiUrl}/api/v1/metrics`)
+      fetch('/api/v1/metrics')
 //       fetch(`/api/containers`) //temp for Flash Server
         .then(res => {
           console.log("🔍 API Response status:", res.status);

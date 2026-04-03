@@ -24,6 +24,7 @@ cat /app/public/config.js
 # Export environment variables for Vite dev server proxy
 export VITE_METRICS_TARGET="http://${TARGET_URL}:8080"
 export VITE_CONTAINERS_TARGET="http://localhost:5000"
+export VITE_LOG_SERVICE_URL="http://${TARGET_URL}:47097"
 
 # Start the application
 echo "Starting Vite dev server..."
