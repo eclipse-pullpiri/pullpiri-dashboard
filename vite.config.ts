@@ -61,6 +61,23 @@ export default defineConfig({
           });
         },
       },
+      // Demo: AWS agent 구독/해지 중계 서버 (server/server.ts, 기본 5174 포트)
+      // BACKEND_PORT 로 백엔드 포트를 바꾸면 프록시 대상도 함께 따라간다.
+      '/demo': {
+        target:
+          process.env.VITE_DEMO_BACKEND_URL ||
+          `http://localhost:${process.env.BACKEND_PORT || 5174}`,
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log('Proxying demo:', req.method, req.url, '→', options.target + req.url);
+          });
+          proxy.on('error', (err, req, res) => {
+            console.error('Demo proxy error:', err.message, 'for', req.url);
+          });
+        },
+      },
     },
   },
 });

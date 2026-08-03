@@ -10,8 +10,10 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "preview": "vite preview",
-    "backend": "ts-node server/server.ts",
-    "dev:all": "concurrently -k \"npm:backend\" \"npm:dev\""
+    "backend": "tsx server/server.ts",
+    "dev:force": "vite --force",
+    "dev:all": "concurrently -k \"npm:backend\" \"npm:dev\"",
+    "dev:all:force": "concurrently -k \"npm:backend\" \"npm:dev:force\""
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",
@@ -79,6 +81,7 @@
     "globals": "^16.3.0",
     "jsdom": "^27.3.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
     "vite": "^6.3.5"
