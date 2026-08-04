@@ -128,7 +128,7 @@ const AGENTS: Record<string, AgentConfig> = {
     id: 'aws-agent-1',
     label: 'Cloud A',
     nodeName: process.env.AWS_AGENT1_NODENAME || 'cloud-01',
-    triggerUrl: process.env.AWS_AGENT1_TRIGGER_URL || 'http://15.164.81.156:9000/trigger',
+    triggerUrl: process.env.AWS_AGENT1_TRIGGER_URL || 'http://10.0.0.30:9000/trigger',
     triggerToken: process.env.AWS_AGENT1_TRIGGER_TOKEN || process.env.AWS_AGENT_TRIGGER_TOKEN,
   },
   // cloud C = 아직 미정 (TBD). nodeName/triggerUrl 은 확정 후 .env 로 갱신.
