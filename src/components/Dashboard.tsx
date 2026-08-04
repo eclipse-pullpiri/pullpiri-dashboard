@@ -10,6 +10,8 @@ import { Storage } from "./Storage";
 import { Cluster } from "./Cluster";
 import { Scenarios } from "./Scenarios";
 import { PodDetail } from "./PodDetail";
+import { Demo } from "./Demo";
+import { Policy } from "./Policy";
 
 type View =
   | "overview"
@@ -18,6 +20,8 @@ type View =
   | "storage"
   | "cluster"
   | "scenarios"
+  | "demo"
+  | "policy"
   | "pod-detail";
 
 // Pod interface
@@ -36,7 +40,7 @@ interface Pod {
 }
 
 export function Dashboard() {
-  const [currentView, setCurrentView] = useState<View>("workloads");
+  const [currentView, setCurrentView] = useState<View>("demo");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedPodName, setSelectedPodName] = useState<string>("");
 
@@ -307,6 +311,10 @@ export function Dashboard() {
         return <Cluster />;
       case "scenarios":
         return <Scenarios namespace="default" />; //2025-09-23 comment out
+      case "demo":
+        return <Demo />;
+      case "policy":
+        return <Policy />;
       case "pod-detail":
         const selectedPod = pods.find((pod) => pod.name === selectedPodName);
         return (

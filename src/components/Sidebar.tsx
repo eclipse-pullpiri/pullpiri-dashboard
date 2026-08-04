@@ -13,6 +13,7 @@ import {
   Hexagon,
   Shield,
   GitBranch,
+  MonitorPlay,
 } from "lucide-react";
 import React from "react";
 import pullpiriLogo from "../assets/pullpiriLogo.png";
@@ -20,7 +21,7 @@ import pullpiriLogo from "../assets/pullpiriLogo.png";
 interface SidebarProps {
   currentView: string;
   onViewChange: (
-    view: "workloads" | "services" | "storage" | "cluster" | "scenarios"
+    view: "workloads" | "services" | "storage" | "cluster" | "scenarios" | "demo" | "policy"
   ) => void;
   collapsed?: boolean;
   onToggle?: () => void;
@@ -35,11 +36,13 @@ export function Sidebar({
   mobile = false,
 }: SidebarProps) {
   const menuItems = [
-    { id: "workloads", label: "Workloads", icon: Box },
+    { id: "workloads", label: "Workloads", icon: Box, disabled: true },
     { id: "services", label: "Services", icon: Network , disabled: true},
     { id: "storage", label: "Storage", icon: Database , disabled: true },
-    { id: "cluster", label: "Nodes", icon: Server },
+    { id: "cluster", label: "Nodes", icon: Server, disabled: true },
     { id: "scenarios", label: "Scenarios", icon: GitBranch , disabled: true },
+    { id: "demo", label: "Demo", icon: MonitorPlay },
+    { id: "policy", label: "Policy", icon: Shield },
   ];
 
   // Mobile sidebar (bottom navigation style)
