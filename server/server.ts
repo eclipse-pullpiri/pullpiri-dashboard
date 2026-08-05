@@ -163,8 +163,15 @@ async function postJson(
   }
 
   // Node 18+ 전역 fetch 사용. 타임아웃은 AbortController 로 처리.
+  //   해지(stop) 시 cloud nodeagent 정지/teardown 이 10초를 넘길 수 있어
+  //   기본 타임아웃을 30초로 두고 DEMO_FETCH_TIMEOUT_MS 로 조절 가능하게 한다.
+  const TIMEOUT_MS = Number(process.env.DEMO_FETCH_TIMEOUT_MS || 30000)
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10000)
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, TIMEOUT_MS)
   try {
     const resp = await fetch(url, {
       method: 'POST',
@@ -179,6 +186,15 @@ async function postJson(
       throw new Error(`${label} responded ${resp.status}: ${text}`)
     }
     return text || `${label} accepted (${resp.status})`
+  } catch (e: any) {
+    // 타임아웃(abort)인 경우 어느 단계/URL 에서 몇 초 만에 끊겼는지 명확히 남긴다.
+    if (timedOut || e?.name === 'AbortError') {
+      const msg = `${label} timed out after ${TIMEOUT_MS}ms (POST ${url})`
+      console.error(`[demo][${label}] !! ${msg}`)
+      throw new Error(msg)
+    }
+    console.error(`[demo][${label}] !! fetch error (POST ${url}): ${e?.message || e}`)
+    throw e
   } finally {
     clearTimeout(timer)
   }
