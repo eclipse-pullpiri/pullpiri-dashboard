@@ -193,32 +193,70 @@ async function postJson(
       console.error(`[demo][${label}] !! ${msg}`)
       throw new Error(msg)
     }
-    console.error(`[demo][${label}] !! fetch error (POST ${url}): ${e?.message || e}`)
-    throw e
+    // undici fetch 는 네트워크 실패를 "fetch failed" 로만 알려주고, 실제 원인은
+    // e.cause (ECONNREFUSED / ENOTFOUND / ECONNRESET / EHOSTUNREACH 등)에 들어있다.
+    // 원인 코드/주소/포트까지 함께 남겨 어디서 왜 실패했는지 바로 알 수 있게 한다.
+    const cause = e?.cause || {}
+    const detail = [
+      cause.code && `code=${cause.code}`,
+      cause.errno && `errno=${cause.errno}`,
+      cause.syscall && `syscall=${cause.syscall}`,
+      cause.address && `address=${cause.address}`,
+      cause.port && `port=${cause.port}`,
+      cause.message && `cause="${cause.message}"`,
+    ]
+      .filter(Boolean)
+      .join(' ')
+    const msg = `${label} fetch failed (POST ${url})${detail ? ' ' + detail : ''}`
+    console.error(`[demo][${label}] !! ${msg}`)
+    // 원래 에러 대신 원인이 포함된 메시지를 던져 상위 500 응답 본문에도 노출한다.
+    throw new Error(msg)
   } finally {
     clearTimeout(timer)
   }
 }
 
 // 구독/해지 트리거를 2단계로 수행한다.
-//   start/stop 모두 ① pharos /network → ② AWS /trigger 순서로 호출한다.
+//   구독(start): ① pharos /network → ② AWS /trigger
+//     (먼저 네트워크 경로를 열고, 그 다음 cloud nodeagent 를 기동)
+//   해지(stop) : ① AWS /trigger → (약 3초 대기) → ② pharos /network
+//     (pharos 를 먼저 끊으면 네트워크가 내려가 cloud 로의 POST 응답이 오지 않으므로,
+//      cloud stop 응답을 먼저 받고 여유(DEMO_STOP_DELAY_MS, 기본 3000ms)를 둔 뒤
+//      pharos 네트워크를 해제한다.)
 // 어느 단계든 실패하면 예외를 던져 호출부에서 500 으로 응답한다.
 async function runSubscription(
   agent: AgentConfig,
   action: 'start' | 'stop'
 ): Promise<{ network: string; trigger: string }> {
   const body = { agentId: agent.id, nodeName: agent.nodeName, action }
+  const skipTrigger = process.env.DEMO_SKIP_TRIGGER === '1'
 
-  const network = await postJson('pharos', PHAROS_NETWORK_URL, body, PHAROS_NETWORK_TOKEN)
-
-  // DEMO_SKIP_TRIGGER=1 이면 pharos /network 단계만 테스트하고 AWS /trigger 는 건너뛴다.
-  //   (AWS 쪽이 아직 준비되지 않았을 때 pharos 연동만 검증하는 용도)
-  if (process.env.DEMO_SKIP_TRIGGER === '1') {
-    console.log('[demo][trigger] skipped (DEMO_SKIP_TRIGGER=1)')
-    return { network, trigger: '[skipped] DEMO_SKIP_TRIGGER=1' }
+  if (action === 'start') {
+    // 구독: pharos 로 네트워크 경로를 먼저 연 뒤 cloud 를 기동한다.
+    const network = await postJson('pharos', PHAROS_NETWORK_URL, body, PHAROS_NETWORK_TOKEN)
+    if (skipTrigger) {
+      console.log('[demo][trigger] skipped (DEMO_SKIP_TRIGGER=1)')
+      return { network, trigger: '[skipped] DEMO_SKIP_TRIGGER=1' }
+    }
+    const trigger = await postJson('trigger', agent.triggerUrl, body, agent.triggerToken)
+    return { network, trigger }
   }
 
-  const trigger = await postJson('trigger', agent.triggerUrl, body, agent.triggerToken)
+  // 해지(stop): cloud 를 먼저 정지(응답 수신)한 뒤 pharos 네트워크를 해제한다.
+  //   DEMO_SKIP_TRIGGER=1 이면 cloud 단계를 건너뛰고 pharos 만 해제한다.
+  let trigger = '[skipped] DEMO_SKIP_TRIGGER=1'
+  if (skipTrigger) {
+    console.log('[demo][trigger] skipped (DEMO_SKIP_TRIGGER=1)')
+  } else {
+    trigger = await postJson('trigger', agent.triggerUrl, body, agent.triggerToken)
+    // cloud 응답 이후 pharos 를 끊기 전에 여유를 둔다(타이밍 이슈 방지).
+    const delayMs = Number(process.env.DEMO_STOP_DELAY_MS || 3000)
+    if (delayMs > 0) {
+      console.log(`[demo] stop: waiting ${delayMs}ms before pharos network release`)
+      await new Promise((r) => setTimeout(r, delayMs))
+    }
+  }
+  const network = await postJson('pharos', PHAROS_NETWORK_URL, body, PHAROS_NETWORK_TOKEN)
   return { network, trigger }
 }
 
