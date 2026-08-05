@@ -191,6 +191,12 @@ export function Demo() {
     }
   }, []);
 
+  // 폴링은 항상 돈다.
+  //   - master(HPC, hostname sa8797)는 구독과 무관하게 항상 실시간으로 보여야 하므로
+  //     폴링을 멈추지 않는다(별도 구독 버튼도 없음).
+  //   - agent(Cloud A/C)는 폴링을 하더라도 화면에는 "버튼으로 subscribed 된 것"만 노출한다.
+  //     (상태 머신에서 폴링 결과로 미구독→구독 자동 전환하는 분기를 제거했기 때문에
+  //      cloud-01 이 실제로 조인돼 있어도 임의로 SUBSCRIBED 로 바뀌지 않는다.)
   useEffect(() => {
     fetchNodes();
     fetchContainers();
@@ -209,6 +215,10 @@ export function Demo() {
       for (const agent of AGENTS) {
         const isJoined = joinedNodes.has(agent.nodeName);
         const cur = prev[agent.id];
+        // 상태는 "버튼"으로만 전환한다. 폴링 결과는 진행 중(subscribing/unsubscribing)인
+        // 요청을 "확정"하는 용도로만 사용하고, 외부 요인에 의한 자동 전환은 하지 않는다.
+        //   - 미구독 상태에서 노드가 보여도 자동으로 subscribed 로 바꾸지 않는다.
+        //   - subscribed 상태에서 노드가 잠깐 안 보여도 자동으로 unsubscribed 로 바꾸지 않는다.
         if (cur === "subscribing" && isJoined) {
           next[agent.id] = "subscribed";
           clearTimer(agent.id); // 조인 확인 → 타임아웃 취소
@@ -216,12 +226,6 @@ export function Demo() {
         } else if (cur === "unsubscribing" && !isJoined) {
           next[agent.id] = "unsubscribed";
           clearTimer(agent.id); // 이탈 확인 → 타임아웃 취소
-          changed = true;
-        } else if (cur === "subscribed" && !isJoined) {
-          next[agent.id] = "unsubscribed"; // 외부 요인 이탈 동기화
-          changed = true;
-        } else if (cur === "unsubscribed" && isJoined) {
-          next[agent.id] = "subscribed"; // 외부 요인 조인 동기화
           changed = true;
         }
       }
