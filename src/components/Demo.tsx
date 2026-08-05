@@ -304,7 +304,12 @@ export function Demo() {
         body: JSON.stringify({ agentId }),
       });
       if (!res.ok) throw new Error(`unsubscribe failed: ${res.status}`);
-      // 확정은 폴링이 노드 사라짐을 확인하면 unsubscribed 로 전환
+      // 해지는 백엔드 200(= cloud stop + pharos 해제 정상 수락)을 받으면 "완료"로 확정한다.
+      //   master 노드 목록에서 cloud-01 이 사라지는 것을 기다리지 않는다.
+      //   (master 는 heartbeat TTL 동안 노드를 목록에 유지하므로, 목록 사라짐을 기다리면
+      //    60초 타임아웃 → 롤백 → 노드 재등장 문제가 발생한다.)
+      clearTimer(agentId);
+      setStates((p) => ({ ...p, [agentId]: "unsubscribed" }));
     } catch (e) {
       console.error(e);
       clearTimer(agentId);
@@ -330,10 +335,14 @@ export function Demo() {
   const containersByNode = (name: string): ContainerInfo[] =>
     containers.filter((c) => c.node === name);
 
-  // 화면에 보여줄 노드 = master(항상) + subscribed 상태인 agent 노드
+  // 화면에 보여줄 노드 = master(항상) + subscribed/unsubscribing 상태인 agent 노드
+  //   해지 요청 중(unsubscribing)에도 노드 정보를 계속 보여주다가,
+  //   해지 완료(unsubscribed)되는 순간 사라지게 한다.
   const visibleNodes: { name: string; role: "MASTER" | "AGENT"; uri: string }[] = [
     { name: MASTER_NODE_NAME, role: "MASTER", uri: "piccolo://hpc-master:8080" },
-    ...AGENTS.filter((a) => states[a.id] === "subscribed").map((a) => ({
+    ...AGENTS.filter(
+      (a) => states[a.id] === "subscribed" || states[a.id] === "unsubscribing"
+    ).map((a) => ({
       name: a.nodeName,
       role: "AGENT" as const,
       uri: a.uri,
