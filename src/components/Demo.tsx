@@ -338,16 +338,37 @@ export function Demo() {
   // 화면에 보여줄 노드 = master(항상) + subscribed/unsubscribing 상태인 agent 노드
   //   해지 요청 중(unsubscribing)에도 노드 정보를 계속 보여주다가,
   //   해지 완료(unsubscribed)되는 순간 사라지게 한다.
-  const visibleNodes: { name: string; role: "MASTER" | "AGENT"; uri: string }[] = [
-    { name: MASTER_NODE_NAME, role: "MASTER", uri: "piccolo://hpc-master:8080" },
-    ...AGENTS.filter(
-      (a) => states[a.id] === "subscribed" || states[a.id] === "unsubscribing"
-    ).map((a) => ({
-      name: a.nodeName,
-      role: "AGENT" as const,
-      uri: a.uri,
-    })),
-  ];
+  //   label 은 카드 제목에 크게 보여줄 표시명(예: "Cloud A", "HPC Master"),
+  //   name 은 실제 hostname(예: cloud-01, sa8797)으로 부제목에 작게 보여준다.
+  type VisibleNode = {
+    name: string;
+    label: string;
+    role: "MASTER" | "AGENT";
+    uri: string;
+  };
+
+  const masterNode: VisibleNode = {
+    name: MASTER_NODE_NAME,
+    label: "HPC Master",
+    role: "MASTER",
+    uri: "piccolo://hpc-master:8080",
+  };
+
+  // 구독/해지 중인 agent 노드들 (구독 토글과 동일한 좌우 순서 = AGENTS 배열 순서)
+  const agentNodes: VisibleNode[] = AGENTS.filter(
+    (a) => states[a.id] === "subscribed" || states[a.id] === "unsubscribing"
+  ).map((a) => ({
+    name: a.nodeName,
+    label: a.label,
+    role: "AGENT" as const,
+    uri: a.uri,
+  }));
+
+  // 순서를 상태에 따라 동적으로 구성한다.
+  //   - agent 없음:      [master]                  → master 가 상단에 전체 폭으로 표시
+  //   - agent 있음:      [Cloud A, Cloud C, master] → Cloud A/C 를 위에, master(전체 폭)를 맨 아래로
+  const visibleNodes: VisibleNode[] =
+    agentNodes.length > 0 ? [...agentNodes, masterNode] : [masterNode];
 
   const subscribedCount = AGENTS.filter((a) => states[a.id] === "subscribed").length;
   const totalContainers = visibleNodes.reduce(
@@ -534,7 +555,9 @@ export function Demo() {
             return (
               <Card
                 key={node.name}
-                className="bg-card/80 backdrop-blur-sm border-border/20 shadow-xl"
+                className={`bg-card/80 backdrop-blur-sm border-border/20 shadow-xl ${
+                  node.role === "MASTER" ? "lg:col-span-2" : ""
+                }`}
               >
                 <CardContent className="p-6">
                   {/* Node header */}
@@ -555,8 +578,8 @@ export function Demo() {
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-foreground">
-                            {node.name}
+                          <span className="font-bold text-foreground text-lg">
+                            {node.label}
                           </span>
                           <Badge
                             className={`text-xs ${
@@ -569,7 +592,7 @@ export function Demo() {
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground font-mono">
-                          {node.uri}
+                          {node.name} · {node.uri}
                         </p>
                       </div>
                     </div>

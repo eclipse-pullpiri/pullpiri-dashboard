@@ -221,7 +221,7 @@ async function postJson(
 //     (먼저 네트워크 경로를 열고, 그 다음 cloud nodeagent 를 기동)
 //   해지(stop) : ① AWS /trigger → (약 3초 대기) → ② pharos /network
 //     (pharos 를 먼저 끊으면 네트워크가 내려가 cloud 로의 POST 응답이 오지 않으므로,
-//      cloud stop 응답을 먼저 받고 여유(DEMO_STOP_DELAY_MS, 기본 3000ms)를 둔 뒤
+//      cloud stop 응답을 먼저 받고 여유(DEMO_STOP_DELAY_MS, 기본 4000ms)를 둔 뒤
 //      pharos 네트워크를 해제한다.)
 // 어느 단계든 실패하면 예외를 던져 호출부에서 500 으로 응답한다.
 async function runSubscription(
@@ -238,6 +238,13 @@ async function runSubscription(
       console.log('[demo][trigger] skipped (DEMO_SKIP_TRIGGER=1)')
       return { network, trigger: '[skipped] DEMO_SKIP_TRIGGER=1' }
     }
+    // pharos 네트워크 설정 후 cloud 로 기동 트리거를 보내기 전에 여유를 둔다
+    //   (네트워크 경로가 안정화될 시간 확보. DEMO_START_DELAY_MS, 기본 1000ms).
+    const startDelayMs = Number(process.env.DEMO_START_DELAY_MS || 1000)
+    if (startDelayMs > 0) {
+      console.log(`[demo] start: waiting ${startDelayMs}ms before cloud trigger`)
+      await new Promise((r) => setTimeout(r, startDelayMs))
+    }
     const trigger = await postJson('trigger', agent.triggerUrl, body, agent.triggerToken)
     return { network, trigger }
   }
@@ -250,7 +257,7 @@ async function runSubscription(
   } else {
     trigger = await postJson('trigger', agent.triggerUrl, body, agent.triggerToken)
     // cloud 응답 이후 pharos 를 끊기 전에 여유를 둔다(타이밍 이슈 방지).
-    const delayMs = Number(process.env.DEMO_STOP_DELAY_MS || 3000)
+    const delayMs = Number(process.env.DEMO_STOP_DELAY_MS || 4000)
     if (delayMs > 0) {
       console.log(`[demo] stop: waiting ${delayMs}ms before pharos network release`)
       await new Promise((r) => setTimeout(r, delayMs))
