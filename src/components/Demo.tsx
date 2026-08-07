@@ -95,6 +95,35 @@ const SUBSCRIBE_TIMEOUT = Number(
   env.VITE_DEMO_SUBSCRIBE_TIMEOUT || 60000
 );
 
+// ---------------------------------------------------------------------------
+// MOCK 모드 (.env: VITE_DEMO_MOCK=1)
+//   백엔드(server.ts)/pharos/cloud 없이 화면 레이아웃과 구독 흐름을 미리 볼 수 있게 한다.
+//   실제 fetch 를 하지 않고 states 로부터 노드/컨테이너 데이터를 만들어낸다.
+//   구독/해지 버튼은 짧은 지연 후 상태만 전환한다(네트워크 호출 없음).
+// ---------------------------------------------------------------------------
+const MOCK = env.VITE_DEMO_MOCK === "1";
+
+// mock CPU/MEM 값을 노드 이름 기준으로 약간씩 흔들어서 "라이브"처럼 보이게 한다.
+function mockUsage(seed: string, base: number): number {
+  const h = Array.from(seed).reduce((a, c) => a + c.charCodeAt(0), 0);
+  const jitter = ((h + Date.now() / 1000) % 10) - 5; // -5 ~ +5
+  return Number(Math.min(95, Math.max(3, base + jitter)).toFixed(1));
+}
+
+// mock 컨테이너(pod) 목록. 노드마다 1~2개씩 생성한다.
+function mockContainersFor(nodeName: string, role: "MASTER" | "AGENT"): ContainerInfo[] {
+  if (role === "MASTER") {
+    return [
+      { name: "piccolo-apiserver", image: "pullpiri/apiserver:latest", node: nodeName, status: "running", memory: "128MB" },
+      { name: "piccolo-monitoring", image: "pullpiri/monitoring:latest", node: nodeName, status: "running", memory: "96MB" },
+    ];
+  }
+  return [
+    { name: `ai-inference-${nodeName}`, image: "pullpiri/ai-model:latest", node: nodeName, status: "running", memory: "1.2GB" },
+  ];
+}
+
+
 export function Demo() {
   // 각 agent 의 구독 상태
   const [states, setStates] = useState<Record<string, SubState>>({
@@ -198,6 +227,7 @@ export function Demo() {
   //     (상태 머신에서 폴링 결과로 미구독→구독 자동 전환하는 분기를 제거했기 때문에
   //      cloud-01 이 실제로 조인돼 있어도 임의로 SUBSCRIBED 로 바뀌지 않는다.)
   useEffect(() => {
+    if (MOCK) return; // MOCK 모드에서는 실제 폴링을 하지 않는다(아래 mock effect 사용).
     fetchNodes();
     fetchContainers();
     const t = setInterval(() => {
@@ -206,6 +236,35 @@ export function Demo() {
     }, POLL_INTERVAL);
     return () => clearInterval(t);
   }, [fetchNodes, fetchContainers]);
+
+  // ----- MOCK: states 로부터 노드/컨테이너 데이터를 만들어 폴링을 흉내낸다 -----
+  //   master 는 항상 표시, agent 는 subscribed/unsubscribing 일 때만 노드로 등장한다.
+  //   subscribing 은 아직 조인 전이므로 노드에 넣지 않는다(→ CONNECTING 배지가 잠깐 보임).
+  useEffect(() => {
+    if (!MOCK) return;
+    const build = () => {
+      const activeAgents = AGENTS.filter(
+        (a) => states[a.id] === "subscribed" || states[a.id] === "unsubscribing"
+      );
+      const nodeNames = [MASTER_NODE_NAME, ...activeAgents.map((a) => a.nodeName)];
+      setNodeResources(
+        nodeNames.map((n) => ({
+          nodeName: n,
+          cpuUsage: mockUsage(n + "cpu", n === MASTER_NODE_NAME ? 35 : 60),
+          memoryUsage: mockUsage(n + "mem", n === MASTER_NODE_NAME ? 45 : 55),
+        }))
+      );
+      setJoinedNodes(new Set(nodeNames));
+      const cs: ContainerInfo[] = [
+        ...mockContainersFor(MASTER_NODE_NAME, "MASTER"),
+        ...activeAgents.flatMap((a) => mockContainersFor(a.nodeName, "AGENT")),
+      ];
+      setContainers(cs);
+    };
+    build();
+    const t = setInterval(build, POLL_INTERVAL);
+    return () => clearInterval(t);
+  }, [states]);
 
   // ----- 상태 머신 조정: 폴링 결과(joinedNodes)로 subscribing/unsubscribing 을 확정 -----
   useEffect(() => {
@@ -240,6 +299,16 @@ export function Demo() {
       return rest;
     });
     setStates((p) => ({ ...p, [agentId]: "subscribing" }));
+
+    // MOCK: 네트워크 호출 없이 잠깐 CONNECTING 후 subscribed 로 전환
+    if (MOCK) {
+      clearTimer(agentId);
+      timersRef.current[agentId] = setTimeout(() => {
+        delete timersRef.current[agentId];
+        setStates((p) => ({ ...p, [agentId]: "subscribed" }));
+      }, 900);
+      return;
+    }
 
     // 타임아웃: 제한 시간 내 노드가 조인되지 않으면 실패 처리
     clearTimer(agentId);
@@ -281,6 +350,16 @@ export function Demo() {
       return rest;
     });
     setStates((p) => ({ ...p, [agentId]: "unsubscribing" }));
+
+    // MOCK: 네트워크 호출 없이 잠깐 DISCONNECTING 후 unsubscribed 로 전환
+    if (MOCK) {
+      clearTimer(agentId);
+      timersRef.current[agentId] = setTimeout(() => {
+        delete timersRef.current[agentId];
+        setStates((p) => ({ ...p, [agentId]: "unsubscribed" }));
+      }, 900);
+      return;
+    }
 
     // 타임아웃: 제한 시간 내 노드가 이탈하지 않으면 실패 처리(다시 subscribed 로)
     clearTimer(agentId);
@@ -349,6 +428,9 @@ export function Demo() {
     //   구독 토글과 좌우 위치를 맞추기 위해 AGENTS 인덱스로 고정한다.
     //   master 는 전체 폭이라 사용하지 않는다(undefined).
     col?: 1 | 2;
+    // 빈 자리(placeholder): 구독 안 된 반대편 agent 칸을 비워 컬럼 위치를 유지하기 위해 사용.
+    //   렌더 시 아무것도 그리지 않는 투명 칸으로 처리한다.
+    placeholder?: boolean;
   };
 
   const masterNode: VisibleNode = {
@@ -361,24 +443,41 @@ export function Demo() {
   // 구독/해지 중인 agent 노드들.
   //   화면 컬럼 위치는 구독 토글과 동일하게 AGENTS 인덱스로 고정한다.
   //   (Cloud A=1번째=왼쪽, Cloud C=2번째=오른쪽)
-  //   따라서 Cloud C 만 구독해도 C 카드는 오른쪽 컬럼에 남고 왼쪽(Cloud A 자리)은 비게 된다.
-  const agentNodes: VisibleNode[] = AGENTS.map((a, idx) => ({ agent: a, idx }))
-    .filter(
-      ({ agent }) =>
-        states[agent.id] === "subscribed" ||
-        states[agent.id] === "unsubscribing"
-    )
-    .map(({ agent, idx }) => ({
-      name: agent.nodeName,
-      label: agent.label,
-      role: "AGENT" as const,
-      uri: agent.uri,
-      col: (idx === 0 ? 1 : 2) as 1 | 2,
-    }));
+  //   구독 안 된 칸은 placeholder(빈 칸)로 채워, Cloud C 만 구독해도 C 카드가
+  //   오른쪽 컬럼에 남고 왼쪽(Cloud A 자리)은 비게 한다.
+  //   (정적 index.css 에 lg:col-start-* 유틸이 없어 CSS 대신 빈 칸으로 위치를 고정한다.)
+  const activeAgentIdx = AGENTS.map((a, idx) =>
+    states[a.id] === "subscribed" || states[a.id] === "unsubscribing" ? idx : -1
+  ).filter((i) => i >= 0);
+
+  const agentNodes: VisibleNode[] =
+    activeAgentIdx.length > 0
+      ? AGENTS.map((agent, idx): VisibleNode => {
+          const isActive = activeAgentIdx.includes(idx);
+          const col = (idx === 0 ? 1 : 2) as 1 | 2;
+          return isActive
+            ? {
+                name: agent.nodeName,
+                label: agent.label,
+                role: "AGENT",
+                uri: agent.uri,
+                col,
+              }
+            : {
+                // 빈 칸: 이름만 key 용도로 구분되게 두고 placeholder 로 표시
+                name: `__placeholder-${agent.id}`,
+                label: "",
+                role: "AGENT",
+                uri: "",
+                col,
+                placeholder: true,
+              };
+        })
+      : [];
 
   // 순서를 상태에 따라 동적으로 구성한다.
-  //   - agent 없음:      [master]                  → master 가 상단에 전체 폭으로 표시
-  //   - agent 있음:      [Cloud A, Cloud C, master] → Cloud A/C 를 위에, master(전체 폭)를 맨 아래로
+  //   - agent 없음:      [master]                        → master 가 상단에 전체 폭으로 표시
+  //   - agent 있음:      [Cloud A|빈칸, Cloud C|빈칸, master] → 각 agent 는 고정 컬럼, master 는 전체 폭으로 맨 아래
   const visibleNodes: VisibleNode[] =
     agentNodes.length > 0 ? [...agentNodes, masterNode] : [masterNode];
 
@@ -562,17 +661,21 @@ export function Demo() {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {visibleNodes.map((node) => {
+            // 빈 칸(placeholder): 구독 안 된 반대편 agent 자리. 투명한 빈 칸으로 그려
+            //   컬럼 위치만 차지하게 한다(내용 없음).
+            //   주의: 정적 index.css 에 `lg:block` 유틸이 없어 `hidden lg:block` 을 쓰면
+            //   빈 칸이 display:none 으로 사라져 Cloud C 가 왼쪽으로 흘러온다.
+            //   그래서 항상 렌더되는 빈 div 로 그리드 셀만 차지하게 한다.
+            if (node.placeholder) {
+              return <div key={node.name} aria-hidden="true" />;
+            }
             const res = nodeResByName(node.name);
             const nodeContainers = containersByNode(node.name);
             return (
               <Card
                 key={node.name}
                 className={`bg-card/80 backdrop-blur-sm border-border/20 shadow-xl ${
-                  node.role === "MASTER"
-                    ? "lg:col-span-2"
-                    : node.col === 2
-                    ? "lg:col-start-2"
-                    : "lg:col-start-1"
+                  node.role === "MASTER" ? "lg:col-span-2" : ""
                 }`}
               >
                 <CardContent className="p-6">
