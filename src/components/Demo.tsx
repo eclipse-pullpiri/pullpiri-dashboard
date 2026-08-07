@@ -345,6 +345,10 @@ export function Demo() {
     label: string;
     role: "MASTER" | "AGENT";
     uri: string;
+    // agent 카드가 놓일 그리드 컬럼(1=왼쪽=Cloud A, 2=오른쪽=Cloud C).
+    //   구독 토글과 좌우 위치를 맞추기 위해 AGENTS 인덱스로 고정한다.
+    //   master 는 전체 폭이라 사용하지 않는다(undefined).
+    col?: 1 | 2;
   };
 
   const masterNode: VisibleNode = {
@@ -354,15 +358,23 @@ export function Demo() {
     uri: "piccolo://hpc-master:8080",
   };
 
-  // 구독/해지 중인 agent 노드들 (구독 토글과 동일한 좌우 순서 = AGENTS 배열 순서)
-  const agentNodes: VisibleNode[] = AGENTS.filter(
-    (a) => states[a.id] === "subscribed" || states[a.id] === "unsubscribing"
-  ).map((a) => ({
-    name: a.nodeName,
-    label: a.label,
-    role: "AGENT" as const,
-    uri: a.uri,
-  }));
+  // 구독/해지 중인 agent 노드들.
+  //   화면 컬럼 위치는 구독 토글과 동일하게 AGENTS 인덱스로 고정한다.
+  //   (Cloud A=1번째=왼쪽, Cloud C=2번째=오른쪽)
+  //   따라서 Cloud C 만 구독해도 C 카드는 오른쪽 컬럼에 남고 왼쪽(Cloud A 자리)은 비게 된다.
+  const agentNodes: VisibleNode[] = AGENTS.map((a, idx) => ({ agent: a, idx }))
+    .filter(
+      ({ agent }) =>
+        states[agent.id] === "subscribed" ||
+        states[agent.id] === "unsubscribing"
+    )
+    .map(({ agent, idx }) => ({
+      name: agent.nodeName,
+      label: agent.label,
+      role: "AGENT" as const,
+      uri: agent.uri,
+      col: (idx === 0 ? 1 : 2) as 1 | 2,
+    }));
 
   // 순서를 상태에 따라 동적으로 구성한다.
   //   - agent 없음:      [master]                  → master 가 상단에 전체 폭으로 표시
@@ -556,7 +568,11 @@ export function Demo() {
               <Card
                 key={node.name}
                 className={`bg-card/80 backdrop-blur-sm border-border/20 shadow-xl ${
-                  node.role === "MASTER" ? "lg:col-span-2" : ""
+                  node.role === "MASTER"
+                    ? "lg:col-span-2"
+                    : node.col === 2
+                    ? "lg:col-start-2"
+                    : "lg:col-start-1"
                 }`}
               >
                 <CardContent className="p-6">
