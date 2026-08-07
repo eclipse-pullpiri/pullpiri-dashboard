@@ -21,23 +21,29 @@ const POLICY_SECTIONS: PolicySection[] = [
   {
     title: "1. Overview",
     paragraphs: [
-      "This page describes our operating policy. Replace this placeholder text with the actual policy content.",
-    ],
-  },
-  {
-    title: "2. Scope",
-    paragraphs: [
-      "Describe the scope this policy applies to.",
-      "You can add multiple paragraphs per section.",
-    ],
-  },
-  {
-    title: "3. Details",
-    paragraphs: [
-      "Add the detailed policy statements here.",
+      "This policy prevents the headlamp from being turned off while the vehicle is in drive."
     ],
   },
 ];
+
+// Policy YAML shown under "2. Details".
+const POLICY_YAML = `apiVersion: v1
+kind: Policy
+metadata:
+  name: lighting_control
+
+spec:
+  placement:
+    availableNodes:
+      - HPC
+  procedure:
+    type: Control
+    strategy: preventHeadlampOff
+    trigger:
+      voiceCommand:
+        intent: lights_off
+      vehicleState:
+        gear: D`;
 
 export function Policy() {
   return (
@@ -49,7 +55,7 @@ export function Policy() {
         </div>
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Policy</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-base text-muted-foreground">
             Our operating policy
           </p>
         </div>
@@ -66,13 +72,23 @@ export function Policy() {
               {section.paragraphs.map((p, pIdx) => (
                 <p
                   key={pIdx}
-                  className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line"
+                  className="text-base leading-relaxed text-muted-foreground whitespace-pre-line"
                 >
                   {p}
                 </p>
               ))}
             </section>
           ))}
+
+          {/* 2. Details - Policy YAML */}
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold text-foreground">
+              2. Details
+            </h2>
+            <pre className="overflow-x-auto rounded-lg border border-border/40 bg-muted/50 p-4 text-base leading-relaxed text-foreground font-mono">
+              <code>{POLICY_YAML}</code>
+            </pre>
+          </section>
         </div>
       </Card>
     </div>
